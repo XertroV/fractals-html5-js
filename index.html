@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.7.3/p5.min.js"></script>
+    <script language="javascript" src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.7.3/addons/p5.dom.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/5.9.0/math.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bignumber.js/8.1.1/bignumber.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/big-js@3.1.3/big.min.js"></script>
+
+    <style>
+        body {
+            margin: 0
+        }
+    </style>
+</head>
+<body>
+
+<!--<canvas id="fractal-canvas" width="100vw" height="100vh">-->
+<!--</canvas>-->
+
+<script>
+
+    const PriorityQueue = (() => {
+        const top = 0;
+        const parent = i => ((i + 1) >>> 1) - 1;
+        const left = i => (i << 1) + 1;
+        const right = i => (i + 1) << 1;
+
+        class PriorityQueueInner {
+            constructor(comparator = (a, b) => a > b) {
+                this._heap = [];
+                this._comparator = comparator;
+            }
+            size() {
+                return this._heap.length;
+            }
+            isEmpty() {
+                return this.size() == 0;
+            }
+            peek() {
+                return this._heap[top];
+            }
+            push(...values) {
+                values.forEach(value => {
+                    this._heap.push(value);
+                    this._siftUp();
+                });
+                return this.size();
+            }
+            pop() {
+                const poppedValue = this.peek();
+                const bottom = this.size() - 1;
+                if (bottom > top) {
+                    this._swap(top, bottom);
+                }
+                this._heap.pop();
+                this._siftDown();
+                return poppedValue;
+            }
+            replace(value) {
+                const replacedValue = this.peek();
+                this._heap[top] = value;
+                this._siftDown();
+                return replacedValue;
+            }
+            _greater(i, j) {
+                return this._comparator(this._heap[i], this._heap[j]);
+            }
+            _swap(i, j) {
+                [this._heap[i], this._heap[j]] = [this._heap[j], this._heap[i]];
+            }
+            _siftUp() {
+                let node = this.size() - 1;
+                while (node > top && this._greater(node, parent(node))) {
+                    this._swap(node, parent(node));
+                    node = parent(node);
+                }
+            }
+            _siftDown() {
+                let node = top;
+                while (
+                    (left(node) < this.size() && this._greater(left(node), node)) ||
+                    (right(node) < this.size() && this._greater(right(node), node))
+                    ) {
+                    let maxChild = (right(node) < this.size() && this._greater(right(node), left(node))) ? right(node) : left(node);
+                    this._swap(node, maxChild);
+                    node = maxChild;
+                }
+            }
+        }
+
+        return PriorityQueueInner
+    })()
+    let xyQueue = new PriorityQueue()
+
+    const BN_DPS = 20;
+
+    let BASE_W = window.innerWidth
+    let BASE_H = window.innerHeight
+
+    const TARGET_FPS = 80;
+    const FRAME_TIME = 1000.0 / TARGET_FPS;
+    const RENDER_TYPE = localStorage.getItem("RENDER_TYPE") || "linear"; // "pri_queue";  // pri_queue, linear
+
+    const ITER_TEST_LIMIT = 10000;
+    let W_SCALE, H_SCALE, RE_MIN, RE_MAX, IM_MIN, IM_MAX;
+
+    function setup() {
+        // createCanvas(BASE_W, BASE_H)
+        createCanvas(400,560)
+        pixelDensity(1)
+        background(41)
+        loadPixels()
+
+        BASE_W = width
+        BASE_H = height
+
+        W_SCALE = 2 * BASE_W / Math.min(BASE_H, BASE_W)
+        H_SCALE = 2 * BASE_H / Math.min(BASE_H, BASE_W)
+        setReIm(0,0)
+        setReIm(-1.6240723061703701, -0.0001784830150446813, 60000000)
+    }
+
+
+    let rgba = [0,0,0,0]
+    let c = math.complex(0,0)
+    let z = math.complex(0,0)
+    let z_im, z_re, c_im, c_re
+
+    let hasDrawn = false
+
+    const ZOOM_SCALE = 2
+    let zoom = 1, pixelInQueue = [];
+
+    function isPixelInQueue(px, py) {
+        return pixelInQueue[px + py * BASE_W] === 1
+    }
+
+    function setPixelInQueue(px, py) {
+        pixelInQueue[px + py * BASE_W] = 1
+    }
+
+    function zoomFactor(factor) {
+        setReIm(BigNumber(RE_MIN).plus(RE_MAX).div(2), BigNumber(IM_MAX).plus(IM_MIN).div(2), zoom * factor)
+    }
+
+    function setReIm(re, im, _zoom) {
+        zoom = _zoom || zoom
+        let re_offset =  BigNumber(ZOOM_SCALE).div(zoom).times(W_SCALE);
+        RE_MAX = BigNumber(re).plus(re_offset), RE_MIN = BigNumber(re).minus(re_offset);
+        let im_offset = BigNumber(ZOOM_SCALE).div(zoom).times(H_SCALE);
+        IM_MAX = BigNumber(im).plus(im_offset), IM_MIN = BigNumber(im).minus(im_offset);
+        hasDrawn = false, last_y = 0, last_x = 0
+        xyQueue = new PriorityQueue((a, b) => a[0] < b[0])
+        xyQueue.push([0, BASE_H / 2, BASE_W / 2])
+        pixelInQueue = new Array(BASE_W * BASE_H)
+        pixelInQueue.fill(0)
+    }
+
+    let last_x = 0, last_y = 0, x, y, _re, _im, _re2, _im2, start_time, pix, _phaseOffset = 0;
+
+    function mapBigNumber(pos, r1s, r1e, r2s, r2e) {
+        return BigNumber(pos).minus(r1s).div(BigNumber(r1e).minus(r1s)).times(BigNumber(r2e).minus(r2s)).plus(r2s).sd(BN_DPS)
+    }
+
+    function mouseClicked() {
+        let ma = mapBigNumber(mouseX, 0, BASE_W, RE_MIN, RE_MAX)
+        let mb = mapBigNumber(mouseY, 0, BASE_H, IM_MAX, IM_MIN)
+        console.log(ma.toString(), mb.toString())
+        _phaseOffset = (_phaseOffset + 120) % 360
+        setReIm(ma, mb, zoom * 2)
+    }
+
+    function mColor(n, freq, phase) {
+        // if (n === ITER_TEST_LIMIT) { return 0 }
+        return 255 * Math.pow(cos(sqrt(n) * freq + phase), 2.0)
+    }
+
+    let count = 0
+    function renderPixel(){
+        count += 1
+        c_re = mapBigNumber(x, 0, BASE_W, RE_MIN, RE_MAX)
+        c_im = mapBigNumber(y, 0, BASE_H, IM_MAX, IM_MIN)  // y backwards as min y at top
+
+        // if (Math.abs(y1) > 2 || Math.abs(x1) > 2) { continue; }
+
+        let n;
+        z_im = BigNumber(0)
+        z_re = BigNumber(0)
+        _re = z_re
+        _im = z_im
+        _re2 = BigNumber(_re).times(_re)
+        _im2 = BigNumber(_im).times(_im)
+
+        rgba = [0,0,0,255]
+
+        for (n = 0; n < ITER_TEST_LIMIT; n++){
+            // z = math.add(c, math.multiply(z, z))
+            // z = math.chain(z).multiply(z).add(c).done()
+
+
+            z_re = BigNumber(_re2).minus(_im2).plus(c_re).sd(BN_DPS)
+            z_im = BigNumber(2).times(_re).times(_im).plus(c_im).sd(BN_DPS)
+            _re = z_re
+            _im = z_im
+            _re2 = z_re.times(z_re).sd(BN_DPS)
+            _im2 = z_im.times(z_im).sd(BN_DPS)
+            // if (count < 100) { console.log(z_re.toString(), z_im.toString(), count) }
+            // console.log(z_re.toString(), z_im.toString(), _re2.toString(), _im2.toString())
+            if (_re2.gt(4) || _im2.gt(4)) { break; }
+            // let _sqrtZoom = sqrt(zoom)
+            // if (_re2 < 0.0001/_sqrtZoom && _im2 < 0.0001/_sqrtZoom) { /* console.log(_re2, _im2, n); */ n = ITER_TEST_LIMIT;  }
+        }
+        if (count < 100) { console.log(n, z_re.toString(), z_im.toString(), count) }
+
+        // rgba[3] = map(sqrt(map(n, 0, ITER_TEST_LIMIT, 0, 1)), 0, 1, 0, 255)
+
+        let freq = 1
+        rgba[0] = mColor(n, freq, _phaseOffset + 0)
+        rgba[1] = mColor(n, freq, _phaseOffset + 120)
+        rgba[2] = mColor(n, freq, _phaseOffset + 240)
+
+        pix = (x + y * BASE_W) * 4;
+        pixels[pix + 0] = rgba[0]
+        pixels[pix + 1] = rgba[1]
+        pixels[pix + 2] = rgba[2]
+        pixels[pix + 3] = rgba[3]
+
+        return n
+    }
+
+    function draw() {
+        // console.log(frameRate())
+        // console.log('count', count)
+        if (hasDrawn) { return }
+
+        let n;
+        start_time = Date.now()
+        // console.log(frameRate())
+
+        if (last_x === 0 && last_y === 0) {
+            for (y = 0; y < BASE_H; y++){
+                for (x = 0; x < BASE_W; x++){
+                    pix = (x + y * width) * 4;
+                    // pixels[pix + 0] = 0
+                    // pixels[pix + 1] = 0
+                    // pixels[pix + 2] = 0
+                    pixels[pix + 3] = Math.floor(pixels[pix + 3] * 0.25)
+                }
+            }
+        }
+
+        if (RENDER_TYPE === "pri_queue") {
+            let dx, dy
+            while (Date.now() < start_time + FRAME_TIME) {
+                if (!xyQueue.isEmpty()) {
+                    [_, x, y] = xyQueue.pop()
+                    let n = renderPixel()
+                    for (dx = -1; dx <= 1; dx++) {
+                        for (dy = -1; dy <= 1; dy++) {
+                            if (dx === 0 && dy === 0) { continue }
+                            x2 = x + dx, y2 = y + dy
+                            if (isPixelInQueue(x2, y2)) { continue }
+                            if (x2 >= 0 && x2 <= BASE_W && y2 >= 0 && y2 < BASE_H)
+                                xyQueue.push([n, x2, y2])
+                            setPixelInQueue(x + dx, y + dy)
+                        }
+                    }
+                }
+            }
+            last_x = x, last_y = y
+        }
+
+        else if (RENDER_TYPE === "linear") {
+            for (y = last_y; y < BASE_H; y++) {
+                for (x = last_x; x < BASE_W; x++) {
+                    // counter++
+                    renderPixel()
+                    // console.log(Date.now())
+                    if (x % 10 === 0) {
+                        if (Date.now() > start_time + FRAME_TIME) { break; }
+                    }
+                }
+                if (Date.now() > start_time + FRAME_TIME) { break; }
+                last_x = 0
+            }
+        }
+
+        else {
+            console.error("RENDER_TYPE unknown:", RENDER_TYPE)
+            RENDER_TYPE = "linear"
+        }
+
+        last_x = x, last_y = y;
+        // console.log(last_x, last_y, counter)
+        updatePixels()
+
+        if (last_y >= BASE_H && last_x >= BASE_W) {
+            hasDrawn = true;
+        }
+        // ellipse(x, height/2, 20, 20);
+        // x = x + 1;
+        // ellipse(50, 50, 80, 80);
+        // if (mouseIsPressed) {
+        //     fill(0);
+        // } else {
+        //     fill(255);
+        // }
+        // ellipse(mouseX, mouseY, 80, 80);
+    }
+</script>
+
+</body>
+</html>
