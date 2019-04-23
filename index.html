@@ -95,6 +95,57 @@
     })()
     let xyQueue = new PriorityQueue()
 
+    class BigNumberShim {
+        constructor(n) {
+            if (n._bnShim) {
+                this.n = n.n
+            } else {
+                this.n = n
+            }
+            this._bnShim = true
+        }
+
+        times(a) {
+            a = a.n || a
+            return BigNumber(this.n * a)
+        }
+
+        div(a) {
+            a = a.n || a
+            return BigNumber(this.n / a)
+        }
+
+        plus(a) {
+            a = a.n || a
+            return BigNumber(this.n + a)
+        }
+
+        minus(a) {
+            a = a.n || a
+            return BigNumber(this.n - a)
+        }
+
+        sd() {
+            return this
+        }
+
+        gt(a) {
+            a = a.n || a
+            return this.n > a
+        }
+
+        lt(a) {
+            a = a.n || a
+            return this.n < a
+        }
+
+        toString() {
+            return this.n.toString()
+        }
+    }
+
+    BigNumber = (n) => new BigNumberShim(n)
+
     const BN_DPS = 20;
 
     let BASE_W = window.innerWidth
