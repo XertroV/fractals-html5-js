@@ -162,15 +162,15 @@
         // createCanvas(BASE_W, BASE_H)
         createCanvas(400,560)
         pixelDensity(1)
-        background(41)
-        loadPixels()
+        background(0)
+        // loadPixels()
 
         BASE_W = width
         BASE_H = height
 
         W_SCALE = 2 * BASE_W / Math.min(BASE_H, BASE_W)
         H_SCALE = 2 * BASE_H / Math.min(BASE_H, BASE_W)
-        setReIm(-0.5,0)
+        setReIm(0,0,1)
         // X looking thing
         // setReIm(-1.6240723061703701, -0.0001784830150446813, 60000000)
         // super fast iteration changes at high zoom
@@ -202,9 +202,9 @@
 
     function setReIm(re, im, _zoom) {
         zoom = _zoom || zoom
-        let re_offset =  BigNumber(ZOOM_SCALE).div(zoom).times(W_SCALE);
+        let re_offset = 1; // BigNumber(ZOOM_SCALE).div(zoom).times(W_SCALE);
         RE_MAX = BigNumber(re).plus(re_offset), RE_MIN = BigNumber(re).minus(re_offset);
-        let im_offset = BigNumber(ZOOM_SCALE).div(zoom).times(H_SCALE);
+        let im_offset = 1; // BigNumber(ZOOM_SCALE).div(zoom).times(H_SCALE);
         IM_MAX = BigNumber(im).plus(im_offset), IM_MIN = BigNumber(im).minus(im_offset);
         hasDrawn = false, last_y = 0, last_x = 0
         xyQueue = new PriorityQueue((a, b) => a[0] < b[0])
@@ -222,9 +222,19 @@
     function mouseClicked() {
         let ma = mapBigNumber(mouseX, 0, BASE_W, RE_MIN, RE_MAX)
         let mb = mapBigNumber(mouseY, 0, BASE_H, IM_MAX, IM_MIN)
-        console.log(ma.toString(), mb.toString())
-        _phaseOffset = (_phaseOffset + 120) % 360
-        setReIm(ma, mb, zoom * 2)
+        radius = sqrt(ma*ma + mb*mb)
+        tau = atan(mb/ma)
+        tau = 0
+
+        // if (ma < 0 || mb < 0)
+        //     tau += 3.14
+
+        console.log(`radius: ${radius}, tau: ${tau}`)
+
+        // console.log(ma.toString(), mb.toString())
+        // _phaseOffset = (_phaseOffset + 120) % 360
+        // setReIm(ma, mb, zoom * 2)
+        // hasDrawn = true;
     }
 
     function mColor(n, freq, phase) {
@@ -285,10 +295,69 @@
         return n
     }
 
+    function end_iteration_for_z(a, b) {
+        if (a*a + b*b > 50) { return true }
+        return false
+    }
+
+    let tau = 0.1;
+    let radius = 0.45;
+    function gen_next_pair() {
+        let a = sin(tau) * radius
+        let b = cos(tau) * radius
+        tau += 3.1415 / 2 / 60 / 2;
+        return [a, b]
+    }
+
     function draw() {
+        if (hasDrawn) { return }
+
+        background(0)
+
+        fill(255)
+        stroke(150,150,20)
+
+        let za = 0, zb = 0, lza, lzb
+        let [a, b] = gen_next_pair()
+        let toDraw = new PriorityQueue((ms, ns) => ms[0] > ns[0])
+        let nIter = 0
+        while (!end_iteration_for_z(za, zb) && nIter < 50) {
+            toDraw.push([nIter, za, zb]);
+
+            lza = za, lzb = zb
+            za2 = za*za
+            zb2 = zb*zb
+            zab = za*zb
+
+            za = za2 - zb2 + a
+            zb = 2 * zab + b
+
+            nIter++;
+        }
+
+        let lx, ly
+        while (!toDraw.isEmpty()) {
+            [_, rx, ry] = toDraw.pop()
+            x = map(rx, -2, 2, 0, BASE_W)
+            y = map(ry, -2, 2, 0, BASE_H)
+            if (rx !== 0 && ry !== 0) {
+            ellipse(x, y, 5, 5);
+            if (lx && ly)
+                line(x, y, lx, ly)
+            }
+            lx = x, ly = y
+            // console.log(rx, ry)
+        }
+
+
+        // hasDrawn = true
+
+
+
+
+        return;
         // console.log(frameRate())
         // console.log('count', count)
-        if (hasDrawn) { return }
 
         let n;
         start_time = Date.now()
