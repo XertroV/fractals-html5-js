@@ -155,7 +155,7 @@
     const FRAME_TIME = 1000.0 / TARGET_FPS;
     const RENDER_TYPE = localStorage.getItem("RENDER_TYPE") || "linear"; // "pri_queue";  // pri_queue, linear
 
-    const ITER_TEST_LIMIT = 10000;
+    const ITER_TEST_LIMIT = 1000;
     let W_SCALE, H_SCALE, RE_MIN, RE_MAX, IM_MIN, IM_MAX;
 
     function setup() {
@@ -170,8 +170,11 @@
 
         W_SCALE = 2 * BASE_W / Math.min(BASE_H, BASE_W)
         H_SCALE = 2 * BASE_H / Math.min(BASE_H, BASE_W)
-        setReIm(0,0)
-        setReIm(-1.6240723061703701, -0.0001784830150446813, 60000000)
+        setReIm(-0.5,0)
+        // X looking thing
+        // setReIm(-1.6240723061703701, -0.0001784830150446813, 60000000)
+        // super fast iteration changes at high zoom
+        // setReIm(-1.6240723061754485, -0.00017848301229170512, 3000000000)
     }
 
 
@@ -183,7 +186,7 @@
     let hasDrawn = false
 
     const ZOOM_SCALE = 2
-    let zoom = 1, pixelInQueue = [];
+    let zoom = 2, pixelInQueue = [];
 
     function isPixelInQueue(px, py) {
         return pixelInQueue[px + py * BASE_W] === 1
@@ -205,7 +208,7 @@
         IM_MAX = BigNumber(im).plus(im_offset), IM_MIN = BigNumber(im).minus(im_offset);
         hasDrawn = false, last_y = 0, last_x = 0
         xyQueue = new PriorityQueue((a, b) => a[0] < b[0])
-        xyQueue.push([0, BASE_H / 2, BASE_W / 2])
+        xyQueue.push([0, BASE_W / 2, BASE_H / 2])
         pixelInQueue = new Array(BASE_W * BASE_H)
         pixelInQueue.fill(0)
     }
