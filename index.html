@@ -153,7 +153,7 @@
 
     const TARGET_FPS = 80;
     const FRAME_TIME = 1000.0 / TARGET_FPS;
-    const RENDER_TYPE = localStorage.getItem("RENDER_TYPE") || "linear"; // "pri_queue";  // pri_queue, linear
+    let RENDER_TYPE = localStorage.getItem("RENDER_TYPE") || "linear"; // "pri_queue";  // pri_queue, linear
 
     const ITER_TEST_LIMIT = 1000;
     let W_SCALE, H_SCALE, RE_MIN, RE_MAX, IM_MIN, IM_MAX;
@@ -223,7 +223,7 @@
         let ma = mapBigNumber(mouseX, 0, BASE_W, RE_MIN, RE_MAX)
         let mb = mapBigNumber(mouseY, 0, BASE_H, IM_MAX, IM_MIN)
         console.log(ma.toString(), mb.toString())
-        _phaseOffset = (_phaseOffset + 120) % 360
+        // _phaseOffset = (_phaseOffset + 120) % 360
         setReIm(ma, mb, zoom * 2)
     }
 
@@ -233,6 +233,8 @@
     }
 
     let count = 0
+    let start_za = -0
+    let start_zb = 0
     function renderPixel(){
         count += 1
         c_re = mapBigNumber(x, 0, BASE_W, RE_MIN, RE_MAX)
@@ -241,8 +243,12 @@
         // if (Math.abs(y1) > 2 || Math.abs(x1) > 2) { continue; }
 
         let n;
-        z_im = BigNumber(0)
-        z_re = BigNumber(0)
+        // init point 0 + i0
+        // z_im = BigNumber(0)
+        // z_re = BigNumber(0)
+        // init point -0.5 + i0?
+        z_im = BigNumber(start_zb)
+        z_re = BigNumber(start_za)
         _re = z_re
         _im = z_im
         _re2 = BigNumber(_re).times(_re)
